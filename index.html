@@ -1,0 +1,1686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Music Visualizer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: #000;
+            color: #fff;
+            overflow: hidden;
+            position: relative;
+        }
+
+        #container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+
+        #three-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        #ui-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        .ui-element {
+            pointer-events: auto;
+        }
+
+        .upload-area {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            border: 2px dashed rgba(138, 43, 226, 0.5);
+            border-radius: 20px;
+            padding: 60px 40px;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            min-width: 400px;
+        }
+
+        .upload-area:hover {
+            border-color: rgba(138, 43, 226, 0.8);
+            background: rgba(0, 0, 0, 0.8);
+            transform: translate(-50%, -50%) scale(1.05);
+        }
+
+        .upload-area.drag-over {
+            border-color: #8a2be2;
+            background: rgba(138, 43, 226, 0.1);
+        }
+
+        .upload-icon {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 20px;
+            background: linear-gradient(45deg, #8a2be2, #ff69b4);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+        }
+
+        .upload-text {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #8a2be2, #ff69b4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .upload-subtext {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 14px;
+        }
+
+        #file-input {
+            display: none;
+        }
+
+        .controls-panel {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(20px);
+            border-radius: 25px;
+            padding: 20px 30px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .controls-panel.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .play-btn {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(45deg, #8a2be2, #ff69b4);
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+
+        .play-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 5px 20px rgba(138, 43, 226, 0.5);
+        }
+
+        .progress-container {
+            flex: 1;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+            overflow: hidden;
+            cursor: pointer;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(45deg, #8a2be2, #ff69b4);
+            width: 0%;
+            transition: width 0.1s ease;
+        }
+
+        .time-display {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.8);
+            min-width: 80px;
+            text-align: center;
+        }
+
+        .mode-selector {
+            position: absolute;
+            top: 40px;
+            right: 40px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .mode-btn {
+            padding: 12px 20px;
+            background: rgba(0, 0, 0, 0.6);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 25px;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+            backdrop-filter: blur(10px);
+        }
+
+        .mode-btn:hover, .mode-btn.active {
+            background: rgba(138, 43, 226, 0.6);
+            border-color: #8a2be2;
+            transform: translateY(-2px);
+        }
+
+        .lyrics-container {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            max-width: 80%;
+            z-index: 5;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.5s ease;
+        }
+
+        .lyrics-container.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .lyric-line {
+            font-size: clamp(2rem, 5vw, 4rem);
+            font-weight: bold;
+            margin: 20px 0;
+            transition: all 0.8s ease;
+            text-shadow: 0 0 20px rgba(138, 43, 226, 0.5);
+            opacity: 0.3;
+            transform: scale(0.9);
+        }
+
+        .lyric-line.current {
+            opacity: 1;
+            transform: scale(1.1);
+            background: linear-gradient(45deg, #8a2be2, #ff69b4, #00ffff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: glow 2s ease-in-out infinite alternate;
+        }
+
+        .lyric-line.past {
+            opacity: 0.1;
+            transform: scale(0.8);
+        }
+
+        @keyframes glow {
+            from {
+                text-shadow: 0 0 20px rgba(138, 43, 226, 0.5);
+            }
+            to {
+                text-shadow: 0 0 30px rgba(138, 43, 226, 1), 0 0 40px rgba(255, 105, 180, 0.5);
+            }
+        }
+
+        .transcription-status {
+            position: absolute;
+            top: 40px;
+            left: 40px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px 25px;
+            border-radius: 25px;
+            border: 2px solid rgba(138, 43, 226, 0.5);
+            backdrop-filter: blur(10px);
+            display: none;
+        }
+
+        .transcription-status.visible {
+            display: block;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(138, 43, 226, 0.3);
+            border-radius: 50%;
+            border-top-color: #8a2be2;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .audio-visualizer {
+            position: absolute;
+            bottom: 140px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 400px;
+            height: 60px;
+            display: flex;
+            align-items: end;
+            justify-content: center;
+            gap: 2px;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .audio-visualizer.visible {
+            opacity: 1;
+        }
+
+        .freq-bar {
+            width: 4px;
+            background: linear-gradient(to top, #8a2be2, #ff69b4);
+            border-radius: 2px;
+            height: 10px;
+            transition: height 0.1s ease;
+        }
+
+        .settings-panel {
+            position: absolute;
+            top: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 20px;
+            padding: 20px;
+            display: flex;
+            gap: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .settings-panel.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .advanced-controls {
+            position: absolute;
+            bottom: 140px;
+            right: 40px;
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 20px;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            width: 280px;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .advanced-controls.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .control-group {
+            margin-bottom: 20px;
+        }
+
+        .control-group:last-child {
+            margin-bottom: 0;
+        }
+
+        .control-label {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.8);
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .control-value {
+            color: #8a2be2;
+            font-weight: bold;
+        }
+
+        .slider {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: rgba(255, 255, 255, 0.2);
+            outline: none;
+            -webkit-appearance: none;
+            cursor: pointer;
+        }
+
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: linear-gradient(45deg, #8a2be2, #ff69b4);
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(138, 43, 226, 0.5);
+        }
+
+        .slider::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: linear-gradient(45deg, #8a2be2, #ff69b4);
+            cursor: pointer;
+            border: none;
+        }
+
+        .effects-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .effect-btn {
+            padding: 8px 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            color: white;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+
+        .effect-btn:hover {
+            background: rgba(138, 43, 226, 0.3);
+            border-color: #8a2be2;
+        }
+
+        .effect-btn.active {
+            background: rgba(138, 43, 226, 0.6);
+            border-color: #8a2be2;
+        }
+
+        .camera-controls {
+            position: absolute;
+            right: 40px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .camera-controls.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .camera-btn {
+            width: 50px;
+            height: 50px;
+            background: rgba(0, 0, 0, 0.8);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+
+        .camera-btn:hover {
+            background: rgba(138, 43, 226, 0.6);
+            border-color: #8a2be2;
+            transform: scale(1.1);
+        }
+
+        .screenshot-flash {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: white;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 9999;
+            transition: opacity 0.1s ease;
+        }
+
+        .screenshot-flash.active {
+            opacity: 0.8;
+        }
+
+        .notification {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 20px 40px;
+            border-radius: 15px;
+            color: white;
+            font-size: 16px;
+            z-index: 10000;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(20px);
+            border: 2px solid rgba(138, 43, 226, 0.5);
+        }
+
+        .notification.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .quality-selector {
+            position: absolute;
+            top: 120px;
+            right: 40px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .quality-btn {
+            padding: 8px 16px;
+            background: rgba(0, 0, 0, 0.6);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 12px;
+            backdrop-filter: blur(10px);
+        }
+
+        .quality-btn:hover, .quality-btn.active {
+            background: rgba(138, 43, 226, 0.6);
+            border-color: #8a2be2;
+        }
+
+        .fps-counter {
+            position: absolute;
+            top: 40px;
+            left: 40px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px 15px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-family: monospace;
+            color: #0f0;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(0, 255, 0, 0.3);
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .fps-counter.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .spectrum-analyzer {
+            position: absolute;
+            bottom: 140px;
+            left: 40px;
+            width: 280px;
+            height: 120px;
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 15px;
+            padding: 15px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .spectrum-analyzer.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .spectrum-title {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.6);
+            margin-bottom: 10px;
+        }
+
+        .spectrum-canvas {
+            width: 100%;
+            height: 80px;
+            border-radius: 8px;
+        }
+
+        .preset-panel {
+            position: absolute;
+            top: 40px;
+            left: 40px;
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 20px;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            min-width: 200px;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .preset-panel.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .preset-title {
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: white;
+        }
+
+        .preset-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .preset-item {
+            padding: 10px 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .preset-item:hover {
+            background: rgba(138, 43, 226, 0.3);
+            transform: translateX(5px);
+        }
+
+        .preset-item.active {
+            background: rgba(138, 43, 226, 0.6);
+        }
+
+        .preset-actions {
+            display: flex;
+            gap: 5px;
+        }
+
+        .preset-action-btn {
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            opacity: 0.6;
+            transition: opacity 0.3s ease;
+        }
+
+        .preset-action-btn:hover {
+            opacity: 1;
+        }
+
+        .setting-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .setting-label {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .toggle-btn {
+            width: 50px;
+            height: 26px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 13px;
+            position: relative;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        .toggle-btn.active {
+            background: linear-gradient(45deg, #8a2be2, #ff69b4);
+        }
+
+        .toggle-btn::after {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: white;
+            top: 3px;
+            left: 3px;
+            transition: transform 0.3s ease;
+        }
+
+        .toggle-btn.active::after {
+            transform: translateX(24px);
+        }
+
+        @media (max-width: 768px) {
+            .upload-area {
+                min-width: 300px;
+                padding: 40px 20px;
+            }
+
+            .controls-panel {
+                bottom: 20px;
+                left: 20px;
+                right: 20px;
+                transform: none;
+                padding: 15px 20px;
+            }
+
+            .mode-selector {
+                top: 20px;
+                right: 20px;
+                flex-direction: column;
+            }
+
+            .audio-visualizer {
+                width: 300px;
+                bottom: 100px;
+            }
+
+            .advanced-controls {
+                right: 20px;
+                bottom: 100px;
+                width: 240px;
+            }
+
+            .camera-controls {
+                right: 20px;
+            }
+
+            .quality-selector {
+                top: 80px;
+                right: 20px;
+            }
+
+            .spectrum-analyzer {
+                left: 20px;
+                bottom: 100px;
+                width: 240px;
+            }
+
+            .preset-panel {
+                left: 20px;
+                top: 20px;
+            }
+
+            .settings-panel {
+                flex-wrap: wrap;
+                gap: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <!-- Three.js Canvas -->
+        <canvas id="three-canvas"></canvas>
+        
+        <!-- UI Overlay -->
+        <div id="ui-overlay">
+            <!-- Upload Area -->
+            <div class="upload-area ui-element" id="upload-area">
+                <div class="upload-icon">🎵</div>
+                <div class="upload-text">Drop Your Music Here</div>
+                <div class="upload-subtext">Supports MP3, WAV, OGG files</div>
+                <input type="file" id="file-input" accept="audio/*" />
+            </div>
+
+            <!-- Transcription Status -->
+            <div class="transcription-status" id="transcription-status">
+                <div class="spinner"></div>
+                <span>Transcribing lyrics...</span>
+            </div>
+
+            <!-- Settings Panel -->
+            <div class="settings-panel ui-element" id="settings-panel">
+                <div class="setting-group">
+                    <div class="setting-label">Lyrics</div>
+                    <div class="toggle-btn active ui-element" id="lyrics-toggle"></div>
+                </div>
+                <div class="setting-group">
+                    <div class="setting-label">Particles</div>
+                    <div class="toggle-btn active ui-element" id="particles-toggle"></div>
+                </div>
+                <div class="setting-group">
+                    <div class="setting-label">Beat Sync</div>
+                    <div class="toggle-btn active ui-element" id="beat-sync-toggle"></div>
+                </div>
+                <div class="setting-group">
+                    <div class="setting-label">FPS</div>
+                    <div class="toggle-btn ui-element" id="fps-toggle"></div>
+                </div>
+            </div>
+
+            <!-- Advanced Controls -->
+            <div class="advanced-controls ui-element" id="advanced-controls">
+                <div class="control-group">
+                    <div class="control-label">
+                        <span>Particle Size</span>
+                        <span class="control-value" id="size-value">0.05</span>
+                    </div>
+                    <input type="range" class="slider ui-element" id="size-slider" min="0.01" max="0.2" step="0.01" value="0.05">
+                </div>
+                <div class="control-group">
+                    <div class="control-label">
+                        <span>Animation Speed</span>
+                        <span class="control-value" id="speed-value">1.0x</span>
+                    </div>
+                    <input type="range" class="slider ui-element" id="speed-slider" min="0.1" max="3" step="0.1" value="1">
+                </div>
+                <div class="control-group">
+                    <div class="control-label">
+                        <span>Camera Distance</span>
+                        <span class="control-value" id="zoom-value">5.0</span>
+                    </div>
+                    <input type="range" class="slider ui-element" id="zoom-slider" min="2" max="15" step="0.5" value="5">
+                </div>
+                <div class="control-group">
+                    <div class="control-label">
+                        <span>Visual Effects</span>
+                    </div>
+                    <div class="effects-grid">
+                        <div class="effect-btn ui-element" data-effect="bloom">Bloom</div>
+                        <div class="effect-btn ui-element" data-effect="trails">Trails</div>
+                        <div class="effect-btn ui-element" data-effect="pulse">Pulse</div>
+                        <div class="effect-btn ui-element" data-effect="wave">Wave</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Camera Controls -->
+            <div class="camera-controls ui-element" id="camera-controls">
+                <div class="camera-btn ui-element" id="screenshot-btn" title="Screenshot">📷</div>
+                <div class="camera-btn ui-element" id="fullscreen-btn" title="Fullscreen">⛶</div>
+                <div class="camera-btn ui-element" id="reset-camera-btn" title="Reset Camera">🎯</div>
+            </div>
+
+            <!-- Quality Selector -->
+            <div class="quality-selector ui-element" id="quality-selector">
+                <div class="quality-btn ui-element" data-quality="low">Low</div>
+                <div class="quality-btn ui-element" data-quality="medium">Medium</div>
+                <div class="quality-btn active ui-element" data-quality="high">High</div>
+                <div class="quality-btn ui-element" data-quality="ultra">Ultra</div>
+            </div>
+
+            <!-- FPS Counter -->
+            <div class="fps-counter" id="fps-counter">FPS: 60</div>
+
+            <!-- Spectrum Analyzer -->
+            <div class="spectrum-analyzer ui-element" id="spectrum-analyzer">
+                <div class="spectrum-title">Audio Spectrum</div>
+                <canvas class="spectrum-canvas" id="spectrum-canvas"></canvas>
+            </div>
+
+            <!-- Preset Panel -->
+            <div class="preset-panel ui-element" id="preset-panel">
+                <div class="preset-title">Presets</div>
+                <div class="preset-list" id="preset-list">
+                    <div class="preset-item active ui-element" data-preset="default">
+                        <span>Default</span>
+                    </div>
+                    <div class="preset-item ui-element" data-preset="intense">
+                        <span>Intense</span>
+                    </div>
+                    <div class="preset-item ui-element" data-preset="chill">
+                        <span>Chill</span>
+                    </div>
+                    <div class="preset-item ui-element" data-preset="minimal">
+                        <span>Minimal</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Screenshot Flash -->
+            <div class="screenshot-flash" id="screenshot-flash"></div>
+
+            <!-- Notification -->
+            <div class="notification" id="notification"></div>
+
+            <!-- Mode Selector -->
+            <div class="mode-selector ui-element" id="mode-selector">
+                <div class="mode-btn active" data-mode="cosmic">Cosmic</div>
+                <div class="mode-btn" data-mode="neon">Neon</div>
+                <div class="mode-btn" data-mode="ocean">Ocean</div>
+                <div class="mode-btn" data-mode="fire">Fire</div>
+            </div>
+
+            <!-- Lyrics Display -->
+            <div class="lyrics-container" id="lyrics-container"></div>
+
+            <!-- Audio Visualizer -->
+            <div class="audio-visualizer" id="audio-visualizer"></div>
+
+            <!-- Controls Panel -->
+            <div class="controls-panel" id="controls-panel">
+                <button class="play-btn ui-element" id="play-btn">▶</button>
+                <div class="progress-container ui-element" id="progress-container">
+                    <div class="progress-bar" id="progress-bar"></div>
+                </div>
+                <div class="time-display" id="time-display">0:00 / 0:00</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Audio Element -->
+    <audio id="audio-player" crossorigin="anonymous"></audio>
+
+    <script>
+        // Global variables
+        let scene, camera, renderer, audioContext, analyser, audioSource;
+        let particles = [];
+        let isPlaying = false;
+        let currentMode = 'cosmic';
+        let showLyrics = true;
+        let showParticles = true;
+        let beatSync = true;
+        let audioBuffer, currentTime = 0, duration = 0;
+        let lyrics = [];
+        let currentLyricIndex = -1;
+        let particleSize = 0.05;
+        let animationSpeed = 1;
+        let cameraDistance = 5;
+        let activeEffects = new Set();
+        let quality = 'high';
+        let showFPS = false;
+        let frameCount = 0;
+        let lastTime = performance.now();
+        let fps = 60;
+        let autoRotate = true;
+        let mouseX = 0, mouseY = 0;
+        let targetRotationX = 0, targetRotationY = 0;
+
+        // Visual mode configurations
+        const visualModes = {
+            cosmic: {
+                colors: [0x6366f1, 0x8b5cf6, 0xec4899, 0xf59e0b],
+                particleCount: 2000,
+                speed: 0.02
+            },
+            neon: {
+                colors: [0x00ff88, 0x00ffff, 0xff00ff, 0xffff00],
+                particleCount: 3000,
+                speed: 0.03
+            },
+            ocean: {
+                colors: [0x3b82f6, 0x06b6d4, 0x10b981, 0x84cc16],
+                particleCount: 1500,
+                speed: 0.015
+            },
+            fire: {
+                colors: [0xef4444, 0xf97316, 0xeab308, 0xdc2626],
+                particleCount: 2500,
+                speed: 0.025
+            }
+        };
+
+        const qualityPresets = {
+            low: { particleMultiplier: 0.3, size: 0.08 },
+            medium: { particleMultiplier: 0.6, size: 0.06 },
+            high: { particleMultiplier: 1.0, size: 0.05 },
+            ultra: { particleMultiplier: 1.5, size: 0.04 }
+        };
+
+        const presets = {
+            default: {
+                size: 0.05,
+                speed: 1,
+                zoom: 5,
+                effects: []
+            },
+            intense: {
+                size: 0.08,
+                speed: 2.5,
+                zoom: 3,
+                effects: ['bloom', 'pulse']
+            },
+            chill: {
+                size: 0.03,
+                speed: 0.5,
+                zoom: 8,
+                effects: ['trails']
+            },
+            minimal: {
+                size: 0.02,
+                speed: 0.8,
+                zoom: 10,
+                effects: []
+            }
+        };
+
+        // Initialize Three.js scene
+        function initThreeJS() {
+            const container = document.getElementById('three-canvas');
+            
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ canvas: container, alpha: true });
+            
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setClearColor(0x000000, 0);
+            
+            camera.position.z = 5;
+            
+            createParticleSystem();
+            animate();
+        }
+
+        // Create particle system
+        function createParticleSystem() {
+            particles = [];
+            
+            const mode = visualModes[currentMode];
+            const qualityMult = qualityPresets[quality].particleMultiplier;
+            const particleCount = Math.floor(mode.particleCount * qualityMult);
+            
+            const geometry = new THREE.BufferGeometry();
+            const positions = new Float32Array(particleCount * 3);
+            const colors = new Float32Array(particleCount * 3);
+            const velocities = new Float32Array(particleCount * 3);
+            
+            for (let i = 0; i < particleCount; i++) {
+                positions[i * 3] = (Math.random() - 0.5) * 20;
+                positions[i * 3 + 1] = (Math.random() - 0.5) * 20;
+                positions[i * 3 + 2] = (Math.random() - 0.5) * 20;
+                
+                velocities[i * 3] = (Math.random() - 0.5) * 0.02;
+                velocities[i * 3 + 1] = (Math.random() - 0.5) * 0.02;
+                velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.02;
+                
+                const color = new THREE.Color(mode.colors[Math.floor(Math.random() * mode.colors.length)]);
+                colors[i * 3] = color.r;
+                colors[i * 3 + 1] = color.g;
+                colors[i * 3 + 2] = color.b;
+            }
+            
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            geometry.setAttribute('velocity', new THREE.BufferAttribute(velocities, 3));
+            
+            const material = new THREE.PointsMaterial({
+                size: particleSize,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.8,
+                blending: activeEffects.has('bloom') ? THREE.AdditiveBlending : THREE.NormalBlending
+            });
+            
+            const particleSystem = new THREE.Points(geometry, material);
+            scene.clear();
+            scene.add(particleSystem);
+            particles.push(particleSystem);
+        }
+
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // FPS counter
+            if (showFPS) {
+                frameCount++;
+                const currentTimeNow = performance.now();
+                if (currentTimeNow >= lastTime + 1000) {
+                    fps = Math.round((frameCount * 1000) / (currentTimeNow - lastTime));
+                    document.getElementById('fps-counter').textContent = `FPS: ${fps}`;
+                    frameCount = 0;
+                    lastTime = currentTimeNow;
+                }
+            }
+            
+            if (showParticles && particles.length > 0) {
+                const mode = visualModes[currentMode];
+                
+                particles.forEach(system => {
+                    // Base rotation with mouse interaction
+                    if (autoRotate) {
+                        system.rotation.x += mode.speed * 0.5 * animationSpeed;
+                        system.rotation.y += mode.speed * animationSpeed;
+                    } else {
+                        system.rotation.x += (targetRotationX - system.rotation.x) * 0.05;
+                        system.rotation.y += (targetRotationY - system.rotation.y) * 0.05;
+                    }
+                    
+                    // Audio-reactive effects
+                    if (analyser && isPlaying && beatSync) {
+                        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+                        analyser.getByteFrequencyData(dataArray);
+                        
+                        const avgFrequency = dataArray.reduce((sum, value) => sum + value, 0) / dataArray.length;
+                        const scale = 1 + (avgFrequency / 255) * 0.5;
+                        
+                        // Apply effects
+                        if (activeEffects.has('pulse')) {
+                            system.scale.setScalar(scale);
+                        }
+                        
+                        if (activeEffects.has('wave')) {
+                            const positions = system.geometry.attributes.position.array;
+                            for (let i = 0; i < positions.length; i += 3) {
+                                const distance = Math.sqrt(
+                                    positions[i] ** 2 + 
+                                    positions[i + 1] ** 2 + 
+                                    positions[i + 2] ** 2
+                                );
+                                const wave = Math.sin(distance + Date.now() * 0.001) * (avgFrequency / 255) * 0.5;
+                                positions[i + 1] += wave;
+                            }
+                            system.geometry.attributes.position.needsUpdate = true;
+                        }
+                        
+                        if (activeEffects.has('trails')) {
+                            system.material.opacity = 0.6 + (avgFrequency / 255) * 0.4;
+                        }
+                        
+                        // Update visualizers
+                        updateFrequencyVisualizer(dataArray);
+                        updateSpectrumAnalyzer(dataArray);
+                    }
+                });
+            }
+            
+            // Update camera distance
+            camera.position.z = cameraDistance;
+            
+            renderer.render(scene, camera);
+        }
+
+        // Initialize audio context
+        function initAudioContext() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 256;
+                analyser.smoothingTimeConstant = 0.8;
+            }
+        }
+
+        // Setup audio source
+        function setupAudioSource(audioElement) {
+            if (audioSource) {
+                audioSource.disconnect();
+            }
+            
+            audioSource = audioContext.createMediaElementSource(audioElement);
+            audioSource.connect(analyser);
+            analyser.connect(audioContext.destination);
+        }
+
+        // Mock speech-to-text transcription
+        function transcribeAudio(audioFile) {
+            document.getElementById('transcription-status').classList.add('visible');
+            
+            // Simulate transcription process
+            setTimeout(() => {
+                // Mock lyrics with timing
+                lyrics = [
+                    { time: 2, text: "Digital waves flow through the night", past: false },
+                    { time: 6, text: "Colors dance in perfect light", past: false },
+                    { time: 10, text: "Music brings our souls alive", past: false },
+                    { time: 14, text: "In this moment we survive", past: false },
+                    { time: 18, text: "Beat drops heavy on the floor", past: false },
+                    { time: 22, text: "Taking us to something more", past: false },
+                    { time: 26, text: "Synthesized dreams come true", past: false },
+                    { time: 30, text: "In this visual rendezvous", past: false }
+                ];
+                
+                document.getElementById('transcription-status').classList.remove('visible');
+                displayLyrics();
+            }, 3000);
+        }
+
+        // Display lyrics
+        function displayLyrics() {
+            const container = document.getElementById('lyrics-container');
+            container.innerHTML = '';
+            
+            lyrics.forEach((lyric, index) => {
+                const lyricDiv = document.createElement('div');
+                lyricDiv.className = 'lyric-line';
+                lyricDiv.textContent = lyric.text;
+                lyricDiv.dataset.index = index;
+                container.appendChild(lyricDiv);
+            });
+            
+            if (showLyrics) {
+                container.classList.add('visible');
+            }
+        }
+
+        // Update current lyric
+        function updateCurrentLyric() {
+            if (!lyrics.length) return;
+            
+            const newIndex = lyrics.findIndex((lyric, index) => {
+                const nextLyric = lyrics[index + 1];
+                return currentTime >= lyric.time && (!nextLyric || currentTime < nextLyric.time);
+            });
+            
+            if (newIndex !== currentLyricIndex) {
+                // Remove previous highlighting
+                document.querySelectorAll('.lyric-line').forEach(line => {
+                    line.classList.remove('current', 'past');
+                });
+                
+                // Add new highlighting
+                if (newIndex >= 0) {
+                    const lines = document.querySelectorAll('.lyric-line');
+                    lines[newIndex].classList.add('current');
+                    
+                    // Mark past lyrics
+                    for (let i = 0; i < newIndex; i++) {
+                        lines[i].classList.add('past');
+                    }
+                }
+                
+                currentLyricIndex = newIndex;
+            }
+        }
+
+        // Update frequency visualizer
+        function updateFrequencyVisualizer(dataArray) {
+            const visualizer = document.getElementById('audio-visualizer');
+            const bars = visualizer.querySelectorAll('.freq-bar');
+            
+            if (bars.length === 0) {
+                // Create frequency bars
+                for (let i = 0; i < 50; i++) {
+                    const bar = document.createElement('div');
+                    bar.className = 'freq-bar';
+                    visualizer.appendChild(bar);
+                }
+                return;
+            }
+            
+            // Update bar heights based on frequency data
+            bars.forEach((bar, index) => {
+                const dataIndex = Math.floor((index / bars.length) * dataArray.length);
+                const height = (dataArray[dataIndex] / 255) * 60;
+                bar.style.height = Math.max(2, height) + 'px';
+            });
+        }
+
+        // Update spectrum analyzer
+        function updateSpectrumAnalyzer(dataArray) {
+            const canvas = document.getElementById('spectrum-canvas');
+            if (!canvas) return;
+            
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width = canvas.offsetWidth;
+            const height = canvas.height = canvas.offsetHeight;
+            
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+            ctx.fillRect(0, 0, width, height);
+            
+            const barWidth = width / dataArray.length;
+            
+            for (let i = 0; i < dataArray.length; i++) {
+                const barHeight = (dataArray[i] / 255) * height;
+                
+                const gradient = ctx.createLinearGradient(0, height - barHeight, 0, height);
+                gradient.addColorStop(0, '#8a2be2');
+                gradient.addColorStop(1, '#ff69b4');
+                
+                ctx.fillStyle = gradient;
+                ctx.fillRect(i * barWidth, height - barHeight, barWidth - 1, barHeight);
+            }
+        }
+
+        // Screenshot functionality
+        function takeScreenshot() {
+            const flash = document.getElementById('screenshot-flash');
+            flash.classList.add('active');
+            
+            setTimeout(() => {
+                flash.classList.remove('active');
+                
+                renderer.render(scene, camera);
+                const dataURL = renderer.domElement.toDataURL('image/png');
+                
+                const link = document.createElement('a');
+                link.download = `visualizer-${Date.now()}.png`;
+                link.href = dataURL;
+                link.click();
+                
+                showNotification('Screenshot saved!');
+            }, 100);
+        }
+
+        // Show notification
+        function showNotification(message) {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.classList.add('visible');
+            
+            setTimeout(() => {
+                notification.classList.remove('visible');
+            }, 2000);
+        }
+
+        // Toggle fullscreen
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    console.log('Fullscreen error:', err);
+                });
+                showNotification('Fullscreen enabled');
+            } else {
+                document.exitFullscreen();
+                showNotification('Fullscreen disabled');
+            }
+        }
+
+        // Reset camera
+        function resetCamera() {
+            camera.position.set(0, 0, 5);
+            camera.rotation.set(0, 0, 0);
+            cameraDistance = 5;
+            document.getElementById('zoom-slider').value = 5;
+            document.getElementById('zoom-value').textContent = '5.0';
+            targetRotationX = 0;
+            targetRotationY = 0;
+            autoRotate = true;
+            showNotification('Camera reset');
+        }
+
+        // Apply preset
+        function applyPreset(presetName) {
+            const preset = presets[presetName];
+            
+            particleSize = preset.size;
+            animationSpeed = preset.speed;
+            cameraDistance = preset.zoom;
+            activeEffects.clear();
+            preset.effects.forEach(effect => activeEffects.add(effect));
+            
+            // Update UI
+            document.getElementById('size-slider').value = preset.size;
+            document.getElementById('size-value').textContent = preset.size.toFixed(2);
+            document.getElementById('speed-slider').value = preset.speed;
+            document.getElementById('speed-value').textContent = preset.speed.toFixed(1) + 'x';
+            document.getElementById('zoom-slider').value = preset.zoom;
+            document.getElementById('zoom-value').textContent = preset.zoom.toFixed(1);
+            
+            document.querySelectorAll('.effect-btn').forEach(btn => {
+                btn.classList.toggle('active', activeEffects.has(btn.dataset.effect));
+            });
+            
+            createParticleSystem();
+            showNotification(`Preset: ${presetName}`);
+        }
+
+        // Change quality
+        function changeQuality(newQuality) {
+            quality = newQuality;
+            particleSize = qualityPresets[quality].size;
+            createParticleSystem();
+            showNotification(`Quality: ${quality}`);
+        }
+
+        // File upload handling
+        function setupFileUpload() {
+            const uploadArea = document.getElementById('upload-area');
+            const fileInput = document.getElementById('file-input');
+            const audioPlayer = document.getElementById('audio-player');
+            
+            uploadArea.addEventListener('click', () => fileInput.click());
+            
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadArea.classList.add('drag-over');
+            });
+            
+            uploadArea.addEventListener('dragleave', () => {
+                uploadArea.classList.remove('drag-over');
+            });
+            
+            uploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadArea.classList.remove('drag-over');
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    handleFileSelect(files[0]);
+                }
+            });
+            
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    handleFileSelect(e.target.files[0]);
+                }
+            });
+            
+            function handleFileSelect(file) {
+                if (file.type.startsWith('audio/')) {
+                    const url = URL.createObjectURL(file);
+                    audioPlayer.src = url;
+                    
+                    initAudioContext();
+                    setupAudioSource(audioPlayer);
+                    transcribeAudio(file);
+                    
+                    // Show UI elements
+                    uploadArea.style.display = 'none';
+                    document.getElementById('controls-panel').classList.add('visible');
+                    document.getElementById('settings-panel').classList.add('visible');
+                    document.getElementById('audio-visualizer').classList.add('visible');
+                    document.getElementById('advanced-controls').classList.add('visible');
+                    document.getElementById('camera-controls').classList.add('visible');
+                    document.getElementById('spectrum-analyzer').classList.add('visible');
+                    document.getElementById('preset-panel').classList.add('visible');
+                }
+            }
+        }
+
+        // Audio controls
+        function setupAudioControls() {
+            const playBtn = document.getElementById('play-btn');
+            const progressContainer = document.getElementById('progress-container');
+            const progressBar = document.getElementById('progress-bar');
+            const timeDisplay = document.getElementById('time-display');
+            const audioPlayer = document.getElementById('audio-player');
+            
+            playBtn.addEventListener('click', () => {
+                if (isPlaying) {
+                    audioPlayer.pause();
+                    playBtn.textContent = '▶';
+                } else {
+                    audioPlayer.play();
+                    playBtn.textContent = '⏸';
+                }
+                isPlaying = !isPlaying;
+            });
+            
+            audioPlayer.addEventListener('timeupdate', () => {
+                currentTime = audioPlayer.currentTime;
+                duration = audioPlayer.duration || 0;
+                
+                const progress = (currentTime / duration) * 100;
+                progressBar.style.width = progress + '%';
+                
+                const formatTime = (time) => {
+                    const minutes = Math.floor(time / 60);
+                    const seconds = Math.floor(time % 60);
+                    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                };
+                
+                timeDisplay.textContent = `${formatTime(currentTime)} / ${formatTime(duration)}`;
+                updateCurrentLyric();
+            });
+            
+            progressContainer.addEventListener('click', (e) => {
+                const rect = progressContainer.getBoundingClientRect();
+                const clickX = e.clientX - rect.left;
+                const clickPercent = clickX / rect.width;
+                audioPlayer.currentTime = clickPercent * duration;
+            });
+        }
+
+        // Mode switching
+        function setupModeSelector() {
+            const modeButtons = document.querySelectorAll('.mode-btn');
+            
+            modeButtons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    modeButtons.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    currentMode = btn.dataset.mode;
+                    createParticleSystem();
+                });
+            });
+        }
+
+        // Settings toggles
+        function setupSettings() {
+            const lyricsToggle = document.getElementById('lyrics-toggle');
+            const particlesToggle = document.getElementById('particles-toggle');
+            const beatSyncToggle = document.getElementById('beat-sync-toggle');
+            const fpsToggle = document.getElementById('fps-toggle');
+            const lyricsContainer = document.getElementById('lyrics-container');
+            const fpsCounter = document.getElementById('fps-counter');
+            
+            lyricsToggle.addEventListener('click', () => {
+                showLyrics = !showLyrics;
+                lyricsToggle.classList.toggle('active', showLyrics);
+                lyricsContainer.classList.toggle('visible', showLyrics);
+            });
+            
+            particlesToggle.addEventListener('click', () => {
+                showParticles = !showParticles;
+                particlesToggle.classList.toggle('active', showParticles);
+                
+                particles.forEach(system => {
+                    system.visible = showParticles;
+                });
+            });
+            
+            beatSyncToggle.addEventListener('click', () => {
+                beatSync = !beatSync;
+                beatSyncToggle.classList.toggle('active', beatSync);
+            });
+
+            fpsToggle.addEventListener('click', () => {
+                showFPS = !showFPS;
+                fpsToggle.classList.toggle('active', showFPS);
+                fpsCounter.classList.toggle('visible', showFPS);
+            });
+        }
+
+        // Setup advanced controls
+        function setupAdvancedControls() {
+            const sizeSlider = document.getElementById('size-slider');
+            const speedSlider = document.getElementById('speed-slider');
+            const zoomSlider = document.getElementById('zoom-slider');
+            
+            sizeSlider.addEventListener('input', (e) => {
+                particleSize = parseFloat(e.target.value);
+                document.getElementById('size-value').textContent = particleSize.toFixed(2);
+                
+                particles.forEach(system => {
+                    system.material.size = particleSize;
+                });
+            });
+            
+            speedSlider.addEventListener('input', (e) => {
+                animationSpeed = parseFloat(e.target.value);
+                document.getElementById('speed-value').textContent = animationSpeed.toFixed(1) + 'x';
+            });
+            
+            zoomSlider.addEventListener('input', (e) => {
+                cameraDistance = parseFloat(e.target.value);
+                document.getElementById('zoom-value').textContent = cameraDistance.toFixed(1);
+            });
+            
+            // Effect buttons
+            document.querySelectorAll('.effect-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const effect = btn.dataset.effect;
+                    
+                    if (activeEffects.has(effect)) {
+                        activeEffects.delete(effect);
+                        btn.classList.remove('active');
+                    } else {
+                        activeEffects.add(effect);
+                        btn.classList.add('active');
+                    }
+                    
+                    // Update particle system for bloom effect
+                    if (effect === 'bloom') {
+                        particles.forEach(system => {
+                            system.material.blending = activeEffects.has('bloom') 
+                                ? THREE.AdditiveBlending 
+                                : THREE.NormalBlending;
+                        });
+                    }
+                });
+            });
+        }
+
+        // Setup camera controls
+        function setupCameraControls() {
+            document.getElementById('screenshot-btn').addEventListener('click', takeScreenshot);
+            document.getElementById('fullscreen-btn').addEventListener('click', toggleFullscreen);
+            document.getElementById('reset-camera-btn').addEventListener('click', resetCamera);
+            
+            // Mouse interaction for camera control
+            let isDragging = false;
+            
+            renderer.domElement.addEventListener('mousedown', () => {
+                isDragging = true;
+                autoRotate = false;
+            });
+            
+            renderer.domElement.addEventListener('mouseup', () => {
+                isDragging = false;
+            });
+            
+            renderer.domElement.addEventListener('mousemove', (e) => {
+                if (isDragging) {
+                    mouseX = (e.clientX / window.innerWidth) * 2 - 1;
+                    mouseY = -(e.clientY / window.innerHeight) * 2 + 1;
+                    
+                    targetRotationY = mouseX * Math.PI;
+                    targetRotationX = mouseY * Math.PI;
+                }
+            });
+            
+            // Double-click to toggle auto-rotate
+            renderer.domElement.addEventListener('dblclick', () => {
+                autoRotate = !autoRotate;
+                showNotification(autoRotate ? 'Auto-rotate enabled' : 'Auto-rotate disabled');
+            });
+        }
+
+        // Setup quality selector
+        function setupQualitySelector() {
+            document.querySelectorAll('.quality-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.quality-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    changeQuality(btn.dataset.quality);
+                });
+            });
+        }
+
+        // Setup presets
+        function setupPresets() {
+            document.querySelectorAll('.preset-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    document.querySelectorAll('.preset-item').forEach(i => i.classList.remove('active'));
+                    item.classList.add('active');
+                    applyPreset(item.dataset.preset);
+                });
+            });
+        }
+
+        // Keyboard shortcuts
+        function setupKeyboardShortcuts() {
+            document.addEventListener('keydown', (e) => {
+                switch(e.key.toLowerCase()) {
+                    case ' ':
+                        e.preventDefault();
+                        document.getElementById('play-btn').click();
+                        break;
+                    case 'f':
+                        toggleFullscreen();
+                        break;
+                    case 's':
+                        takeScreenshot();
+                        break;
+                    case 'r':
+                        resetCamera();
+                        break;
+                    case 'l':
+                        document.getElementById('lyrics-toggle').click();
+                        break;
+                    case 'p':
+                        document.getElementById('particles-toggle').click();
+                        break;
+                    case '1':
+                    case '2':
+                    case '3':
+                    case '4':
+                        const modeButtons = document.querySelectorAll('.mode-btn');
+                        modeButtons[parseInt(e.key) - 1]?.click();
+                        break;
+                }
+            });
+        }
+
+        // Window resize handling
+        function handleResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // Initialize everything
+        function init() {
+            initThreeJS();
+            setupFileUpload();
+            setupAudioControls();
+            setupModeSelector();
+            setupSettings();
+            setupAdvancedControls();
+            setupCameraControls();
+            setupQualitySelector();
+            setupPresets();
+            setupKeyboardShortcuts();
+            
+            window.addEventListener('resize', handleResize);
+        }
+
+        // Start the app
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
